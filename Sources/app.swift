@@ -1,4 +1,4 @@
-// 앱 껍데기: 설정 저장, 번역 언어 목록, 로그인 항목, 새 버전 알림, 설정 창, Dock.
+// 앱 껍데기: 설정 저장, 번역 언어 목록, 로그인 항목, 새 버전 알림, 설정 창, 상단 막대.
 
 import AppKit
 import FoundationModels
@@ -10,7 +10,7 @@ import Translation
 func referenceSource(for target: String) -> Locale.Language {
     Locale.Language(identifier: Locale.Language(identifier: target).languageCode?.identifier == "en" ? "ko" : "en")
 }
-// 시험은 Dock 아이콘과 창 없이 돌려 사용자 화면을 가리지 않는다.
+// 시험은 상단 막대 아이콘과 창 없이 돌려 사용자 화면을 가리지 않는다.
 let isHeadless = CommandLine.arguments.contains("--headless") || optionValue("--attach") != nil
 
 @MainActor var appDelegate: AppDelegate?
@@ -102,6 +102,7 @@ final class AppModel: ObservableObject {
     let paths: Paths
     let isFirstRun: Bool
     private var settingsDate: Date?
+    var onUpdateChange: (() -> Void)?
     private var pendingDownload: String?
     private var pendingDownloadDeadline: Date?
     private var appleIntelligenceUsable = AppleIntelligenceState.read() != .off
@@ -405,7 +406,7 @@ final class AppModel: ObservableObject {
 
     // MARK: 새 버전 알림
 
-    // 내려받기까지 하지는 않고, 새 버전이 있다는 것만 Dock에 표시한다.
+    // 내려받기까지 하지는 않고, 새 버전이 있다는 것만 상단 막대 아이콘에 표시한다.
     func runUpdateChecks() async {
         while true {
             await checkForUpdate()
@@ -441,7 +442,7 @@ final class AppModel: ObservableObject {
 
     private func setUpdate(_ value: AvailableUpdate?) {
         update = value
-        NSApplication.shared.dockTile.badgeLabel = value == nil ? nil : "1"
+        onUpdateChange?()
     }
 
     func openUpdatePage() {
@@ -813,12 +814,18 @@ extension View {
     }
 }
 
-// MARK: - Dock과 메뉴
+enum DiscordAction {
+    case launch, restart
+}
+
+// MARK: - 상단 막대와 메뉴
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuDelegate {
     let model: AppModel
     var supervisor: Supervisor?
+    private var statusItem: NSStatusItem?
+    private var lastMenuLog = ""
 
     init(model: AppModel) {
         self.model = model
@@ -831,24 +838,79 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         model.windowClosed(notification.object as? NSWindow)
     }
 
+    // 메뉴 막대가 꽉 차면 아이콘이 가려질 수 있다. 앱을 다시 실행하면 설정을 열어 길을 남겨 둔다.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
         if let supervisor {
-            Task { await supervisor.handleDockClick() }
+            Task { await supervisor.handleReopen() }
         } else {
             model.showWindow()
         }
         return false
     }
 
-    func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+    func installStatusItem() {
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        let image = NSImage(systemSymbolName: "translate", accessibilityDescription: "디스코드 번역")
+        image?.isTemplate = true // 막대 색에 맞춰 밝고 어둡게 바뀐다.
+        item.button?.image = image
+        item.button?.toolTip = "디스코드 번역"
         let menu = NSMenu()
-        if let update = model.update {
-            let item = menu.addItem(withTitle: "새 버전 \(update.version) 내려받기", action: #selector(openUpdatePage), keyEquivalent: "")
-            item.target = self
+        menu.delegate = self
+        menu.autoenablesItems = false
+        item.menu = menu
+        statusItem = item
+        model.onUpdateChange = { [weak self] in self?.refreshStatusItem() }
+        refreshStatusItem()
+    }
+
+    // 새 버전이 있으면 아이콘 옆에 빨간 점을 찍는다.
+    private func refreshStatusItem() {
+        guard let button = statusItem?.button else { return }
+        button.imagePosition = model.update == nil ? .imageOnly : .imageLeading // 글자 자리를 비워 두지 않는다.
+        button.attributedTitle = model.update == nil
+            ? NSAttributedString(string: "")
+            : NSAttributedString(string: "●", attributes: [.foregroundColor: NSColor.systemRed, .font: NSFont.systemFont(ofSize: 7)])
+    }
+
+    private var menuEntries: [(title: String, action: Selector?)] {
+        var entries: [(title: String, action: Selector?)] = [(model.status.text, nil)]
+        switch supervisor?.discordAction {
+        case .launch: entries.append(("번역 모드로 디스코드 켜기", #selector(runDiscordAction)))
+        case .restart: entries.append(("번역 모드로 디스코드 다시 시작", #selector(runDiscordAction)))
+        case nil: break
         }
-        let settings = menu.addItem(withTitle: "설정…", action: #selector(showSettings), keyEquivalent: "")
-        settings.target = self
-        return menu
+        if let update = model.update {
+            entries.append(("새 버전 \(update.version) 내려받기", #selector(openUpdatePage)))
+        }
+        entries.append(("설정…", #selector(showSettings)))
+        entries.append(("디스코드 번역 종료", #selector(quit)))
+        return entries
+    }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        menu.removeAllItems()
+        for entry in menuEntries {
+            if entry.title == "설정…" { menu.addItem(.separator()) }
+            let item = menu.addItem(withTitle: entry.title, action: entry.action, keyEquivalent: "")
+            item.target = self
+            item.isEnabled = entry.action != nil
+        }
+    }
+
+    // 시험용: 메뉴가 바뀔 때마다 로그에 남긴다.
+    func logMenuIfChanged() {
+        let text = menuEntries.map(\.title).joined(separator: " | ")
+        guard text != lastMenuLog else { return }
+        lastMenuLog = text
+        logLine("메뉴(시험): \(text)")
+    }
+
+    @objc func runDiscordAction() {
+        Task { await supervisor?.handleReopen() }
+    }
+
+    @objc func quit() {
+        NSApplication.shared.terminate(nil)
     }
 
     @objc func showSettings() {

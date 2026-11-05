@@ -1,5 +1,5 @@
 // 실행 흐름 시험: 언어팩 대기, 디스코드 재시작 승인, 상주, 새 버전 알림.
-// 진짜 디스코드 대신 가짜 앱을 쓰고, Dock 아이콘과 창 없이 돌린다. 사용법: node test/run-flow.mjs
+// 진짜 디스코드 대신 가짜 앱을 쓰고, 상단 막대 아이콘과 창 없이 돌린다. 사용법: node test/run-flow.mjs
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
@@ -290,6 +290,27 @@ try {
   await stopHelper();
   await quitFake();
 
+  // 상단 막대 메뉴: 지금 할 수 있는 일만 보여 준다.
+  const menuNow = () => logs.join('').split('메뉴(시험): ').at(-1)?.split('\n')[0] ?? '';
+  const plist = readFileSync(join(root, 'build/디스코드 번역.app/Contents/Info.plist'), 'utf8');
+  check('Dock에 나오지 않는 앱으로 빌드됨', /<key>LSUIElement<\/key>\s*<true\/>/.test(plist));
+  writePacks({});
+  writeLanguages({ ko: 'installed', ja: 'installed' });
+  writeSettings({ targetLanguage: 'ko', restartWithoutAsking: true });
+  await launchFake();
+  startHelper('--fake-languages', languages, '--resident', '--dump-menu');
+  await until(() => fakePort() && logged('번역 표시 연결'));
+  check('번역 중 메뉴에는 상태·설정·종료만 있음', !!(await until(() => menuNow() === '번역 중 | 설정… | 디스코드 번역 종료')), menuNow());
+  await quitFake();
+  check('디스코드가 꺼지면 켜기 메뉴가 나옴', !!(await until(() => menuNow().includes('번역 모드로 디스코드 켜기'))), menuNow());
+  await stopHelper();
+  await launchFake();
+  writeSettings({ targetLanguage: 'ko' });
+  startHelper('--fake-languages', languages, '--resident', '--dump-menu', '--prompt-answer', 'no');
+  check('재시작을 거절했으면 다시 시작 메뉴가 나옴', !!(await until(() => menuNow().includes('번역 모드로 디스코드 다시 시작'))), menuNow());
+  await stopHelper();
+  await quitFake();
+
   // 처음 실행 안내: 끝나기 전에는 디스코드를 건드리지 않는다.
   const readSaved = () => { try { return JSON.parse(readFileSync(settings, 'utf8')); } catch { return null; } };
   writePacks({});
@@ -396,6 +417,14 @@ try {
     return stderr;
   };
   const page = 'https://example.com/releases/latest';
+  feed = { status: 200, body: { tag_name: 'v9.9.9', html_url: page } };
+  writeSettings({ targetLanguage: 'ko', restartWithoutAsking: true });
+  await launchFake();
+  startHelper('--fake-languages', languages, '--resident', '--dump-menu', '--update-url', feedURL);
+  check('새 버전이 있으면 메뉴에 나옴', !!(await until(() => menuNow().includes('새 버전 9.9.9 내려받기'))), menuNow());
+  await stopHelper();
+  await quitFake();
+  writeSettings({ targetLanguage: 'ko' });
   check('새 버전이 있으면 알림', (await checkFeed({ tag_name: 'v9.9.9', html_url: page })).includes('새 버전 있음: 9.9.9'));
   check('10.0.0이 9.9.9보다 새 버전', (await checkFeed({ tag_name: 'v10.0.0', html_url: page })).includes('새 버전 있음: 10.0.0'));
   check('같은 버전이면 알리지 않음', !(await checkFeed({ tag_name: 'v0.2.0', html_url: page })).includes('새 버전 있음'));

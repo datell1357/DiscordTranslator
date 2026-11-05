@@ -781,6 +781,7 @@ final class Supervisor {
                 attached.values.forEach { $0.refresh() }
             }
             if followsDiscord { watchDiscord() }
+            if CommandLine.arguments.contains("--dump-menu") { appDelegate?.logMenuIfChanged() } // 시험용
             if model.readyLanguage == nil { model.status = .waitingForLanguage }
             if unreachable >= 60 {
                 logLine("디버그 포트에 60초 동안 연결하지 못해 끝냅니다")
@@ -826,7 +827,7 @@ final class Supervisor {
     }
 
     // 디스코드는 업데이트를 적용하며 스스로 다시 켜지는데, 이때 실행 옵션이 사라진다.
-    // 평소처럼 Dock에서 켠 경우도 옵션이 없어 같은 길로 온다.
+    // 평소처럼 켠 경우도 옵션이 없어 같은 길로 온다.
     private func recoverIfFlagLost() async {
         let apps = discordApps()
         guard !apps.isEmpty else { return }
@@ -876,8 +877,17 @@ final class Supervisor {
         unreachable = 0
     }
 
-    // Dock 아이콘: 디스코드가 꺼져 있으면 번역 모드로 켜고, 번역 없이 켜져 있으면 다시 물으며, 그 밖에는 설정을 연다.
-    func handleDockClick() async {
+    // 메뉴에 보여 줄 할 일. 지금 번역 중이면 없다.
+    var discordAction: DiscordAction? {
+        guard followsDiscord, model.readyLanguage != nil else { return nil }
+        let apps = discordApps()
+        if apps.isEmpty { return .launch }
+        return apps.contains(where: { declined.contains($0.processIdentifier) }) ? .restart : nil
+    }
+
+    // 메뉴를 고르거나 앱을 다시 실행했을 때: 디스코드가 꺼져 있으면 번역 모드로 켜고, 번역 없이 켜져 있으면
+    // 다시 시작할지 묻고, 그 밖에는 설정을 연다.
+    func handleReopen() async {
         let apps = discordApps()
         guard followsDiscord, model.readyLanguage != nil else {
             model.showWindow()
@@ -1046,7 +1056,10 @@ func start() async {
     let delegate = AppDelegate(model: model)
     appDelegate = delegate
     NSApplication.shared.delegate = delegate
-    if !isHeadless { installMainMenu(delegate: delegate) }
+    if !isHeadless {
+        installMainMenu(delegate: delegate)
+        delegate.installStatusItem()
+    }
     await model.refreshLanguages()
     precondition(Thread.isMainThread, "확인 창은 메인 스레드에서만 띄울 수 있다")
     if CommandLine.arguments.contains("--choose-pack-model") { model.setUsesLanguagePacks(true) } // 시험용: 설정 창에서 고른 것과 같다.
@@ -1101,7 +1114,7 @@ func start() async {
         }
     } else {
         let prepared = await prepareDiscordPort(model: model)
-        // 거절했을 때 로그인 시작을 켜 두었다면 남아 있다가, 디스코드가 새로 켜지거나 Dock 아이콘을 누를 때 다시 묻는다.
+        // 거절했을 때 로그인 시작을 켜 두었다면 남아 있다가, 디스코드가 새로 켜지거나 메뉴에서 고를 때 다시 묻는다.
         guard prepared != nil || model.staysAfterDiscord else { exit(0) }
         logLine("디스코드 번역 시작")
         supervisor = Supervisor(port: prepared ?? 0, script: injectScript, followsDiscord: true, model: model, restartDeclined: prepared == nil) { url in
@@ -1116,6 +1129,6 @@ func start() async {
 
 // dispatchMain()은 메인 큐를 메인 스레드 밖에서 돌릴 수 있어 확인 창을 띄울 때 앱이 죽는다.
 // NSApplication 이벤트 루프를 써야 메인 액터가 진짜 메인 스레드에서 돈다.
-NSApplication.shared.setActivationPolicy(isHeadless ? .accessory : .regular)
+NSApplication.shared.setActivationPolicy(.accessory) // Dock에 나오지 않고 상단 막대에만 있는다.
 Task { @MainActor in await start() }
 NSApplication.shared.run()

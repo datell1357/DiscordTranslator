@@ -220,7 +220,7 @@ struct GuideView: View {
     }
 
     @ViewBuilder private var success: some View {
-        heading("첫 번역이 붙었어요", "번역 줄은 디스코드에서 Ctrl+Shift+T로 숨길 수 있어요.")
+        heading("첫 번역이 붙었어요", "번역 줄은 디스코드에서 Ctrl+Shift+T로 숨길 수 있어요. 설정은 화면 위쪽 막대의 아이콘에 있어요.")
         if model.loginItem == .enabled {
             buttons(primary: "확인", secondary: nil, primaryAction: model.closeGuide, secondaryAction: {})
         } else {
