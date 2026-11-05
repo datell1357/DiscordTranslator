@@ -1,0 +1,70 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>discord mock</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #313338; color: #dbdee1; font: 16px sans-serif; }
+  .scroller_abc { height: 400px; overflow-y: auto; }
+  .scrollerInner_abc { list-style: none; margin: 0; padding: 0; }
+  li { padding: 8px 16px; }
+  .grid_x { display: grid; grid-template-columns: auto 80px; }
+  .embedTitle_x, .embedDescription_x, .embedFieldName_x, .embedFieldValue_x { grid-column: 1 / 1; }
+  .embedDescription_x { white-space: pre-line; }
+  .thumb_x { grid-row: 1 / 8; grid-column: 2 / 2; height: 80px; background: #555; }
+</style>
+<div class="scroller_abc" id="sc">
+  <ol class="scrollerInner_abc" id="list"></ol>
+</div>
+<script>
+  // 디스코드 메시지와 같은 id 구조(chat-messages-*, message-content-*, message-reply-context-*)를 흉내 낸다.
+  const list = document.getElementById('list');
+  window.addMsg = (id, html, replyHtml) => {
+    const li = document.createElement('li');
+    li.id = `chat-messages-1-${id}`;
+    const reply = replyHtml
+      ? `<div id="message-reply-context-${id}"><div id="message-content-r${id}">${replyHtml}</div></div>`
+      : '';
+    li.innerHTML = `<div class="contents">${reply}<h3>user</h3><div id="message-content-${id}">${html}</div></div>`;
+    list.appendChild(li);
+    return li;
+  };
+  // 본문 없이 임베드에만 글이 있는 메시지. 실제 디스코드의 message-accessories > article > 격자 구조를 흉내 낸다.
+  window.addEmbed = (id, title, description, extra = '') => {
+    const li = addMsg(id, '');
+    const box = document.createElement('div');
+    box.id = `message-accessories-${id}`;
+    box.innerHTML = `<article class="embedWrapper_x embedFull_x embed_x"><div class="grid_x">`
+      + `<div class="embedTitle_x embedMargin_x"><a class="embedTitleLink_x" href="https://example.com">${title}</a></div>`
+      + `<div class="embedDescription_x embedMargin_x">${description}</div>${extra}<div class="thumb_x"></div></div></article>`;
+    li.querySelector('.contents').appendChild(box);
+    return li;
+  };
+  addMsg('en1', 'Anyone up for a raid tonight?');
+  addMsg('ko1', '오늘 저녁에 같이 할 사람 있어요?');
+  addMsg('es1', '¿Alguien quiere jugar esta noche con nosotros?');
+  addMsg('fr1', "Est-ce que quelqu'un veut jouer avec nous ce soir ?");
+  addMsg('url1', '<a href="https://example.com">https://example.com/page</a>');
+  addMsg('code1', '<pre><code>const raid = tonight();</code></pre>');
+  addMsg('mix1', 'Check this out: <code>npm install</code> fixed the build for me');
+  addMsg('reply1', 'Sure, I can join after dinner.', 'This quoted text should stay untranslated please');
+  addMsg('xss1', '&lt;img src=x onerror="window.__xss=1"&gt; is what the patch notes showed');
+  addMsg('edit1', 'The server is down right now.');
+  addMsg('list1', 'Enjoy these premium features:\n1. Up to 2K resolution\n2. Up to 100 canvases\n\n———\nBest regards, the team');
+  addMsg('ol1', '<strong>What is the plan?</strong><ol start="3"><li><span>Up to 2K resolution</span></li><li><span>Up to 100 canvases</span></li></ol><ul><li>Please contact the support team</li></ul>');
+  addMsg('m1', 'Hello <span class="mention wrapper_x" role="button">@everyone</span>, please read <a class="mention"><svg></svg>rules</a> before posting.');
+  addMsg('m2', 'Thanks <span class="mention">@Some User</span>, that fixed it for me.');
+  addMsg('m3', '<span class="mention">@Only Mention</span>');
+  addMsg('m4', '이건 한국어 메시지예요 <span class="mention">@English Name Here</span>');
+  addMsg('m5', 'Hello @everyone, the new patch just dropped.');
+  addMsg('m6', 'Thanks <span class="mention">@Real User</span>, also ask @u0 about it please.');
+  addMsg('ja1', '明日の夜、一緒にレイドに行きませんか？新しいパッチも確認したいです。');
+  addMsg('zh1', '有人知道这个视频为什么一直导出失败吗？我已经试了三次。');
+  addMsg('short1', 'lol');
+  addMsg('short2', 'gg');
+  addMsg('short3', 'Sora');
+  addMsg('short4', 'v2.1.0');
+  addMsg('koen1', 'render 왜 안 돼요');
+  addMsg('mixed1', 'The new patch is out for everyone now.\n한국어 안내는 공지 채널에 있어요.\n明日の夜に配信を始めます。');
+  addMsg('g1', 'Up to 4 simultaneous generations');
+  addMsg('g2', 'this goes hard, what model did you use');
+  for (let i = 0; i < 40; i++) addMsg(`bulk${i}`, `This is older message number ${i} about the new update.`);
+</script>

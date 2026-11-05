@@ -1,0 +1,17 @@
+# 디스코드 번역 용어집
+#
+# 한 줄에 「왼쪽 = 오른쪽」으로 적어요. 저장하면 바로 적용돼요.
+# 왼쪽에 영어 알파벳 밖의 글자(한글 등)가 있으면 번역이 끝난 뒤에 글자를 바꿔요.
+# 왼쪽이 영어 알파벳뿐이면 번역 전에 영어 원문을 바꿔요. 번역기가 모르는 속어를 쉬운 영어로 풀어 줄 때 써요.
+
+# 번역 뒤에 고치기
+동시 세대 = 동시 생성
+계속 충돌해요 = 계속 튕겨요
+계속 충돌합니다 = 계속 튕겨요
+
+# 번역 전에 속어 풀기
+goes hard = is really great
+that's fire = that's awesome
+this slaps = this is awesome
+we're so cooked = we're in big trouble
+we're cooked = we're in big trouble
