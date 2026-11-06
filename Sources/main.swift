@@ -752,6 +752,8 @@ final class Supervisor {
         if restartDeclined {
             declined = Set(discordApps().map(\.processIdentifier))
             approvedAt = .distantPast
+            // 설정 창 상태 줄이 「다시 시작」 버튼과 함께 「시작하는 중」으로 보이지 않게 바로 맞춘다.
+            if !declined.isEmpty { model.status = .discordWithoutTranslation }
         }
     }
 
@@ -781,7 +783,9 @@ final class Supervisor {
                 attached.values.forEach { $0.refresh() }
             }
             if followsDiscord { watchDiscord() }
-            if CommandLine.arguments.contains("--dump-menu") { appDelegate?.logMenuIfChanged() } // 시험용
+            let action = discordAction
+            if model.discordAction != action { model.discordAction = action }
+            if CommandLine.arguments.contains("--dump-status") { appDelegate?.logStatusRowIfChanged() } // 시험용
             if model.readyLanguage == nil { model.status = .waitingForLanguage }
             if unreachable >= 60 {
                 logLine("디버그 포트에 60초 동안 연결하지 못해 끝냅니다")
@@ -885,7 +889,7 @@ final class Supervisor {
         return apps.contains(where: { declined.contains($0.processIdentifier) }) ? .restart : nil
     }
 
-    // 메뉴를 고르거나 앱을 다시 실행했을 때: 디스코드가 꺼져 있으면 번역 모드로 켜고, 번역 없이 켜져 있으면
+    // 설정 창의 디스코드 버튼을 누르거나 앱을 다시 실행했을 때: 디스코드가 꺼져 있으면 번역 모드로 켜고, 번역 없이 켜져 있으면
     // 다시 시작할지 묻고, 그 밖에는 설정을 연다.
     func handleReopen() async {
         let apps = discordApps()
@@ -1114,7 +1118,7 @@ func start() async {
         }
     } else {
         let prepared = await prepareDiscordPort(model: model)
-        // 거절했을 때 로그인 시작을 켜 두었다면 남아 있다가, 디스코드가 새로 켜지거나 메뉴에서 고를 때 다시 묻는다.
+        // 거절했을 때 로그인 시작을 켜 두었다면 남아 있다가, 디스코드가 새로 켜지거나 설정 창의 버튼을 누를 때 다시 묻는다.
         guard prepared != nil || model.staysAfterDiscord else { exit(0) }
         logLine("디스코드 번역 시작")
         supervisor = Supervisor(port: prepared ?? 0, script: injectScript, followsDiscord: true, model: model, restartDeclined: prepared == nil) { url in
@@ -1124,6 +1128,7 @@ func start() async {
         }
     }
     delegate.supervisor = supervisor
+    model.onDiscordAction = { Task { await supervisor.handleReopen() } }
     await supervisor.run()
 }
 

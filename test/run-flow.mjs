@@ -290,24 +290,25 @@ try {
   await stopHelper();
   await quitFake();
 
-  // 상단 막대 메뉴: 지금 할 수 있는 일만 보여 준다.
-  const menuNow = () => logs.join('').split('메뉴(시험): ').at(-1)?.split('\n')[0] ?? '';
+  // 설정 창 상태 줄: 지금 할 수 있는 일만 버튼으로 보여 준다(상단 막대 아이콘은 누르면 설정 창을 연다).
+  const statusNow = () => logs.join('').split('상태 줄(시험): ').at(-1)?.split('\n')[0] ?? '';
   const plist = readFileSync(join(root, 'build/디스코드 번역.app/Contents/Info.plist'), 'utf8');
   check('Dock에 나오지 않는 앱으로 빌드됨', /<key>LSUIElement<\/key>\s*<true\/>/.test(plist));
   writePacks({});
   writeLanguages({ ko: 'installed', ja: 'installed' });
   writeSettings({ targetLanguage: 'ko', restartWithoutAsking: true });
   await launchFake();
-  startHelper('--fake-languages', languages, '--resident', '--dump-menu');
+  startHelper('--fake-languages', languages, '--resident', '--dump-status');
   await until(() => fakePort() && logged('번역 표시 연결'));
-  check('번역 중 메뉴에는 상태·설정·종료만 있음', !!(await until(() => menuNow() === '번역 중 | 설정… | 디스코드 번역 종료')), menuNow());
+  check('번역 중 상태 줄에는 상태와 종료만 있음', !!(await until(() => statusNow() === '번역 중 | 종료')), statusNow());
   await quitFake();
-  check('디스코드가 꺼지면 켜기 메뉴가 나옴', !!(await until(() => menuNow().includes('번역 모드로 디스코드 켜기'))), menuNow());
+  check('디스코드가 꺼지면 켜기 버튼이 나옴', !!(await until(() => statusNow() === '디스코드가 꺼져 있어요 | 번역 모드로 켜기 | 종료')), statusNow());
   await stopHelper();
   await launchFake();
   writeSettings({ targetLanguage: 'ko' });
-  startHelper('--fake-languages', languages, '--resident', '--dump-menu', '--prompt-answer', 'no');
-  check('재시작을 거절했으면 다시 시작 메뉴가 나옴', !!(await until(() => menuNow().includes('번역 모드로 디스코드 다시 시작'))), menuNow());
+  startHelper('--fake-languages', languages, '--resident', '--dump-status', '--prompt-answer', 'no');
+  const firstRestartRow = () => logs.join('').split('상태 줄(시험): ').slice(1).map((l) => l.split('\n')[0]).find((l) => l.includes('다시 시작')) ?? '';
+  check('재시작을 거절했으면 처음부터 번역 없이 켜짐과 다시 시작 버튼이 나옴', !!(await until(() => firstRestartRow())) && firstRestartRow() === '디스코드가 번역 없이 켜져 있어요 | 다시 시작 | 종료', firstRestartRow());
   await stopHelper();
   await quitFake();
 
@@ -420,8 +421,8 @@ try {
   feed = { status: 200, body: { tag_name: 'v9.9.9', html_url: page } };
   writeSettings({ targetLanguage: 'ko', restartWithoutAsking: true });
   await launchFake();
-  startHelper('--fake-languages', languages, '--resident', '--dump-menu', '--update-url', feedURL);
-  check('새 버전이 있으면 메뉴에 나옴', !!(await until(() => menuNow().includes('새 버전 9.9.9 내려받기'))), menuNow());
+  startHelper('--fake-languages', languages, '--resident', '--update-url', feedURL);
+  check('켜 둔 동안에도 새 버전을 찾음', !!(await until(() => logged('새 버전 있음: 9.9.9'))));
   await stopHelper();
   await quitFake();
   writeSettings({ targetLanguage: 'ko' });

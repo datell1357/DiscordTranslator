@@ -97,12 +97,14 @@ final class AppModel: ObservableObject {
     @Published private(set) var loginItem = SMAppService.mainApp.status
     @Published private(set) var loginItemError: String?
     @Published var status = AppStatus.starting
+    @Published var discordAction: DiscordAction? // 설정 창 상태 줄에 띄울 디스코드 버튼
     @Published var downloadRequest: TranslationSession.Configuration?
 
     let paths: Paths
     let isFirstRun: Bool
     private var settingsDate: Date?
     var onUpdateChange: (() -> Void)?
+    var onDiscordAction: (() -> Void)?
     private var pendingDownload: String?
     private var pendingDownloadDeadline: Date?
     private var appleIntelligenceUsable = AppleIntelligenceState.read() != .off
@@ -693,7 +695,7 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section {
-                LabeledContent("상태", value: model.status.text)
+                statusRow
                 if !model.targetInstalled { missingLanguage }
             }
 
@@ -776,6 +778,24 @@ struct SettingsView: View {
         .packDownloadTask(model, host: .settings)
     }
 
+    // 상단 막대 메뉴 대신 여기서 지금 상태를 보고, 디스코드를 켜거나 앱을 끝낸다.
+    private var statusRow: some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(model.status == .translating ? Color.green : Color.secondary)
+                .frame(width: 8, height: 8)
+            Text(model.status.text)
+            Spacer()
+            if let action = model.discordAction {
+                Button(action.title) { model.onDiscordAction?() }
+            }
+            Button("종료") { NSApplication.shared.terminate(nil) }
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
+                .help("디스코드 번역을 끝내요. 디스코드는 켜진 채로 남아요.")
+        }
+    }
+
     @ViewBuilder private func packStatus(_ pack: LanguageChoice) -> some View {
         if model.installedPacks.contains(pack.id) {
             Text("받음").foregroundStyle(.secondary)
@@ -817,16 +837,23 @@ extension View {
 
 enum DiscordAction {
     case launch, restart
+
+    var title: String {
+        switch self {
+        case .launch: "번역 모드로 켜기"
+        case .restart: "다시 시작"
+        }
+    }
 }
 
 // MARK: - 상단 막대와 메뉴
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     let model: AppModel
     var supervisor: Supervisor?
     private var statusItem: NSStatusItem?
-    private var lastMenuLog = ""
+    private var lastStatusLog = ""
 
     init(model: AppModel) {
         self.model = model
@@ -855,10 +882,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         image?.isTemplate = true // 막대 색에 맞춰 밝고 어둡게 바뀐다.
         item.button?.image = image
         item.button?.toolTip = "디스코드 번역"
-        let menu = NSMenu()
-        menu.delegate = self
-        menu.autoenablesItems = false
-        item.menu = menu
+        // 메뉴 없이 누르면 바로 설정 창을 연다. 상태와 종료는 설정 창 맨 위에 있다.
+        item.button?.target = self
+        item.button?.action = #selector(showSettings)
         statusItem = item
         model.onUpdateChange = { [weak self] in self?.refreshStatusItem() }
         refreshStatusItem()
@@ -873,53 +899,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             : NSAttributedString(string: "●", attributes: [.foregroundColor: NSColor.systemRed, .font: NSFont.systemFont(ofSize: 7)])
     }
 
-    private var menuEntries: [(title: String, action: Selector?)] {
-        var entries: [(title: String, action: Selector?)] = [(model.status.text, nil)]
-        switch supervisor?.discordAction {
-        case .launch: entries.append(("번역 모드로 디스코드 켜기", #selector(runDiscordAction)))
-        case .restart: entries.append(("번역 모드로 디스코드 다시 시작", #selector(runDiscordAction)))
-        case nil: break
-        }
-        if let update = model.update {
-            entries.append(("새 버전 \(update.version) 내려받기", #selector(openUpdatePage)))
-        }
-        entries.append(("설정…", #selector(showSettings)))
-        entries.append(("디스코드 번역 종료", #selector(quit)))
-        return entries
-    }
-
-    func menuNeedsUpdate(_ menu: NSMenu) {
-        menu.removeAllItems()
-        for entry in menuEntries {
-            if entry.title == "설정…" { menu.addItem(.separator()) }
-            let item = menu.addItem(withTitle: entry.title, action: entry.action, keyEquivalent: "")
-            item.target = self
-            item.isEnabled = entry.action != nil
-        }
-    }
-
-    // 시험용: 메뉴가 바뀔 때마다 로그에 남긴다.
-    func logMenuIfChanged() {
-        let text = menuEntries.map(\.title).joined(separator: " | ")
-        guard text != lastMenuLog else { return }
-        lastMenuLog = text
-        logLine("메뉴(시험): \(text)")
-    }
-
-    @objc func runDiscordAction() {
-        Task { await supervisor?.handleReopen() }
-    }
-
-    @objc func quit() {
-        NSApplication.shared.terminate(nil)
+    // 시험용: 설정 창 상태 줄(상태 글자와 버튼)이 바뀔 때마다 로그에 남긴다.
+    func logStatusRowIfChanged() {
+        let entries = [model.status.text] + [model.discordAction?.title].compactMap { $0 } + ["종료"]
+        let text = entries.joined(separator: " | ")
+        guard text != lastStatusLog else { return }
+        lastStatusLog = text
+        logLine("상태 줄(시험): \(text)")
     }
 
     @objc func showSettings() {
         model.showWindow()
-    }
-
-    @objc func openUpdatePage() {
-        model.openUpdatePage()
     }
 }
 
