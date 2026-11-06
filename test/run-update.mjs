@@ -126,6 +126,7 @@ const stopOldApp = async () => {
 const forgetSparkle = () => {
   spawnSync('defaults', ['delete', testID], { stdio: 'ignore' });
   rmSync(join(homedir(), 'Library/Preferences', `${testID}.plist`), { force: true });
+  rmSync(join(homedir(), 'Library/HTTPStorages', `${testID}.binarycookies`), { force: true });
   for (const folder of ['Library/Caches', 'Library/HTTPStorages', 'Library/Application Support']) {
     rmSync(join(homedir(), folder, testID), { recursive: true, force: true });
   }
