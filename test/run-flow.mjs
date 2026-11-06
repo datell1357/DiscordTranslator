@@ -428,7 +428,8 @@ try {
   writeSettings({ targetLanguage: 'ko' });
   check('새 버전이 있으면 알림', (await checkFeed({ tag_name: 'v9.9.9', html_url: page })).includes('새 버전 있음: 9.9.9'));
   check('10.0.0이 9.9.9보다 새 버전', (await checkFeed({ tag_name: 'v10.0.0', html_url: page })).includes('새 버전 있음: 10.0.0'));
-  check('같은 버전이면 알리지 않음', !(await checkFeed({ tag_name: 'v0.2.0', html_url: page })).includes('새 버전 있음'));
+  check('같은 버전이면 알리지 않음', !(await checkFeed({ tag_name: 'v0.2.1', html_url: page })).includes('새 버전 있음'));
+  check('지난 출시 0.2.0이면 알리지 않음', !(await checkFeed({ tag_name: 'v0.2.0', html_url: page })).includes('새 버전 있음'));
   check('옛 버전이면 알리지 않음', !(await checkFeed({ tag_name: 'v0.1.0', html_url: page })).includes('새 버전 있음'));
   check('저장소가 아직 없어도(404) 그대로 동작', (await checkFeed({ message: 'Not Found' }, 404)).includes('새 버전 확인 실패'));
   check('https가 아닌 주소는 무시', !(await checkFeed({ tag_name: 'v9.9.9', html_url: 'http://example.com/' })).includes('새 버전 있음'));

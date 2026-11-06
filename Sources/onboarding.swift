@@ -12,6 +12,12 @@ enum GuideStage: String {
     case waiting, success, pack
 }
 
+// 안내 창과 설정 창에 같은 문장으로 띄우는 위험 고지. README의 「알아둘 점」과 같은 수준으로만 말한다.
+enum RiskNotice {
+    static let debugPort = "이 앱으로 켠 디스코드는 꺼질 때까지 디버그 포트가 열려 있어서, 같은 맥의 다른 프로그램이 디스코드 세션에 접근할 수 있어요. 믿을 수 있는 프로그램만 쓰는 맥에서 켜 주세요."
+    static let terms = "디스코드 약관은 허가되지 않은 클라이언트 수정을 금지해요. 이 앱은 디스코드 파일을 고치지 않고 서버로 요청도 보내지 않지만, 약관에 어긋나지 않는다고 보장할 수는 없어요."
+}
+
 private struct SampleMessage: Identifiable {
     let id: String // 원문 언어
     let author: String
@@ -166,7 +172,8 @@ struct OnboardingView: View {
             if model.discordState == .needsRestart {
                 Text("지금 켜진 디스코드를 껐다가 다시 켜요. 음성 채널에 있으면 연결이 끊겨요.")
             }
-            Text("이 앱으로 켠 디스코드는 꺼질 때까지 디버그 포트가 열려 있어서, 같은 맥의 다른 프로그램이 디스코드 세션에 접근할 수 있어요. 믿을 수 있는 프로그램만 쓰는 맥에서 켜 주세요.")
+            Text(RiskNotice.debugPort)
+            Text(RiskNotice.terms)
         }
         .font(.callout)
         .foregroundStyle(.secondary)

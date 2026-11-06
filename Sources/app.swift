@@ -686,8 +686,8 @@ struct SettingsView: View {
 
     // 스크롤 없이 다 보이도록 나타나는 줄만큼 창을 늘린다.
     private var height: CGFloat {
-        let wanted = 640 + (model.downloadable.isEmpty ? 0 : 48) + (model.canChooseModel ? 48 : 0) + (model.targetInstalled ? 0 : 136)
-        return CGFloat(min(wanted, 800)) // 더 길면 창 안에서 스크롤한다.
+        let wanted = 830 + (model.downloadable.isEmpty ? 0 : 48) + (model.canChooseModel ? 48 : 0) + (model.targetInstalled ? 0 : 136)
+        return CGFloat(min(wanted, 860)) // 더 길면 창 안에서 스크롤한다.
     }
 
     @State private var showsPacks = CommandLine.arguments.contains("--show-packs")
@@ -762,6 +762,15 @@ struct SettingsView: View {
                 Text("실행")
             } footer: {
                 Text("디스코드가 번역 없이 켜져 있으면 번역 모드로 껐다 켜야 해요. 음성 채널에 들어가 있다면 연결이 끊겨요.")
+            }
+
+            Section("알아둘 점") {
+                Group {
+                    Text(RiskNotice.debugPort)
+                    Text(RiskNotice.terms)
+                }
+                .font(.callout)
+                .foregroundStyle(.secondary)
             }
 
             Section("버전") {

@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 APP="build/디스코드 번역.app"
-VERSION="0.2.0"
+VERSION="0.2.1"
 REPOSITORY="datell1357/DiscordTranslator"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
