@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 APP="build/디스코드 번역.app"
-VERSION="0.2.1"
+VERSION="0.3.0"
 REPOSITORY="datell1357/DiscordTranslator"
 # Sparkle 업데이트 서명의 공개 키. 비밀 키는 출시하는 맥의 키체인(계정 discord-translator)에만 있다.
 SPARKLE_PUBLIC_KEY="hOmHrbOk0JQbzshpgg8FHjv+eDJ5Ra3Mm1AiNg4tZiI="

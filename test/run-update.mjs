@@ -44,7 +44,9 @@ function makeKey(name) {
 }
 
 const plist = (file, key, value) => execFileSync('plutil', ['-replace', key, typeof value === 'boolean' ? '-bool' : '-string', String(value), file]);
-const version = () => execFileSync('plutil', ['-extract', 'CFBundleShortVersionString', 'raw', join(oldApp, 'Contents/Info.plist')], { encoding: 'utf8' }).trim();
+const versionOf = (app) => execFileSync('plutil', ['-extract', 'CFBundleShortVersionString', 'raw', join(app, 'Contents/Info.plist')], { encoding: 'utf8' }).trim();
+const version = () => versionOf(oldApp);
+const builtVersion = versionOf(join(root, 'build/디스코드 번역.app')); // 옛 버전 자리에 쓰는 빌드한 앱의 버전
 
 // 빌드한 앱을 시험용 번들 ID와 시험 키로 바꿔 출시처럼 서명한다. 실제 앱의 설정·Sparkle 기록과 섞이지 않는다.
 function installOldApp(key) {
@@ -146,7 +148,7 @@ try {
   await until(() => logged('번역 표시 연결'), 30000);
   const rejected = await until(() => logged('새 버전 확인 실패'), 20000);
   await sleep(3000);
-  check('다른 키로 서명한 업데이트 목록은 거부함', !!rejected && !logged('새 버전 있음') && !logged('새 버전 받음') && helper.code === undefined && version() === '0.2.1', updateLines());
+  check('다른 키로 서명한 업데이트 목록은 거부함', !!rejected && !logged('새 버전 있음') && !logged('새 버전 받음') && helper.code === undefined && version() === builtVersion, updateLines());
   await stopOldApp();
   await quitFake();
   forgetSparkle();
@@ -163,7 +165,7 @@ try {
   await until(() => logged('번역 표시 연결'), 30000);
   const refused = await until(() => logged('새 버전 확인 실패'), 30000);
   await sleep(3000);
-  check('서명 뒤에 바뀐 DMG는 설치하지 않음', !!refused && !logged('새 버전 설치') && helper.code === undefined && version() === '0.2.1', updateLines());
+  check('서명 뒤에 바뀐 DMG는 설치하지 않음', !!refused && !logged('새 버전 설치') && helper.code === undefined && version() === builtVersion, updateLines());
   await stopOldApp();
   await quitFake();
   forgetSparkle();
@@ -176,7 +178,7 @@ try {
   startOldApp();
   const reminded = await until(() => logged('새 버전 알림: 9.9.9'), 30000);
   await sleep(3000);
-  check('자동 설치를 끄면 알리기만 함', !!reminded && logged('새 버전 있음: 9.9.9') && !logged('새 버전 받음') && helper.code === undefined && version() === '0.2.1', updateLines());
+  check('자동 설치를 끄면 알리기만 함', !!reminded && logged('새 버전 있음: 9.9.9') && !logged('새 버전 받음') && helper.code === undefined && version() === builtVersion, updateLines());
   await stopOldApp();
   await quitFake();
   forgetSparkle();
@@ -187,7 +189,7 @@ try {
   startOldApp();
   const downloaded = await until(() => logged('새 버전 받음: 9.9.9'), 30000);
   await sleep(4000);
-  check('번역 중이 아니면 받아 두기만 함', !!downloaded && !logged('새 버전 설치') && helper.code === undefined && version() === '0.2.1', updateLines());
+  check('번역 중이 아니면 받아 두기만 함', !!downloaded && !logged('새 버전 설치') && helper.code === undefined && version() === builtVersion, updateLines());
   writeFileSync(languages, JSON.stringify({ ko: 'installed', ja: 'installed' }));
   const installing = await until(() => logged('새 버전 설치'), 40000);
   const discordBefore = fakePids()[0];
