@@ -3,7 +3,7 @@
 디스코드 데스크톱 앱(맥)의 외국어 메시지 바로 아래에 번역을 표시합니다.
 번역은 맥 내장 번역 기능을 써서 무료입니다. 이 앱은 메시지를 어디로도 보내지 않습니다.
 
-https://github.com/user-attachments/assets/1c943337-9475-440f-99a0-7ac2efc3708a
+https://github.com/user-attachments/assets/5115f56c-bd1f-4123-b380-ac513dbb3444
 
 <img src="docs/translated.png" width="880" alt="디스코드 채널에서 영어·일본어·중국어·스페인어 메시지 아래에 한국어 번역이 붙은 모습">
 
