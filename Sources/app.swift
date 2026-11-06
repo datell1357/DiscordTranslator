@@ -658,7 +658,8 @@ final class AppModel: ObservableObject {
     }
 
     private func render(_ view: some View, to path: String, wait: Double = 0.5) async {
-        let host = NSHostingView(rootView: view.background(Color(nsColor: .windowBackgroundColor)))
+        // 화면 밖 창은 활성 창이 아니라 강조 버튼이 회색으로 그려진다. 실제로 뜬 창과 같게 활성 상태로 그린다.
+        let host = NSHostingView(rootView: view.background(Color(nsColor: .windowBackgroundColor)).environment(\.controlActiveState, .key))
         let holder = NSWindow(
             contentRect: NSRect(origin: NSPoint(x: -4000, y: -4000), size: host.fittingSize),
             styleMask: .borderless,
