@@ -1077,11 +1077,11 @@ func start() async {
         exit(0)
     }
     if let output = optionValue("--render-settings") {
-        await model.checkForUpdate()
+        if let version = optionValue("--fake-update") { model.setUpdate(AvailableUpdate(version: version)) } // 시험용
         await model.renderSettings(to: output)
         exit(0)
     }
-    Task { await model.runUpdateChecks() }
+    model.updates.start()
 
     if model.isFirstRun {
         if isHeadless, optionValue("--onboarding-answer") == nil {

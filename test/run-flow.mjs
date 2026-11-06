@@ -1,79 +1,26 @@
-// 실행 흐름 시험: 언어팩 대기, 디스코드 재시작 승인, 상주, 새 버전 알림.
+// 실행 흐름 시험: 언어팩 대기, 디스코드 재시작 승인, 상주. 자동 업데이트는 run-update.mjs에서 본다.
 // 진짜 디스코드 대신 가짜 앱을 쓰고, 상단 막대 아이콘과 창 없이 돌린다. 사용법: node test/run-flow.mjs
-import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { createServer } from 'node:http';
+import { spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
+import { buildFake, fakeID, fakePids, fakePort, launchFake, quitFake, removeFake, sleep, until } from './fake-discord.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '..');
 const binary = join(root, 'build/디스코드 번역.app/Contents/MacOS/DiscordTranslator');
-const lsregister = '/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister';
 const base = mkdtempSync(join(process.env.TMPDIR || tmpdir(), 'krt-flow-'));
 const data = join(base, 'data');
 mkdirSync(data);
 const languages = join(base, 'languages.json');
 const settings = join(data, 'settings.json');
-const fakeID = 'test.krt.fake-discord';
-// 임시 폴더의 앱은 macOS가 번들 ID로 찾아 주지 않아서 build/ 아래에 만든다.
-const fakeApp = join(root, 'build/test/FakeDiscord.app');
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 let failures = 0;
 function check(name, ok, detail = '') {
   console.log(`${ok ? '통과' : '실패'} | ${name}${detail ? ` | ${detail}` : ''}`);
   if (!ok) failures++;
 }
-
-function buildFake() {
-  rmSync(fakeApp, { recursive: true, force: true });
-  const contents = join(fakeApp, 'Contents');
-  mkdirSync(join(contents, 'MacOS'), { recursive: true });
-  mkdirSync(join(contents, 'Resources'));
-  execFileSync('swiftc', ['-swift-version', '5', '-target', 'arm64-apple-macos26.0', join(here, 'fake-discord.swift'), '-o', join(contents, 'MacOS/FakeDiscord')], { stdio: 'inherit' });
-  writeFileSync(join(contents, 'Resources/mock-url.txt'), pathToFileURL(join(here, 'mock.html')).href);
-  writeFileSync(join(contents, 'Info.plist'), `<?xml version="1.0" encoding="UTF-8"?>
-<plist version="1.0"><dict>
-<key>CFBundleIdentifier</key><string>${fakeID}</string>
-<key>CFBundleExecutable</key><string>FakeDiscord</string>
-<key>CFBundlePackageType</key><string>APPL</string>
-<key>LSUIElement</key><true/>
-</dict></plist>`);
-  execFileSync('codesign', ['--force', '--sign', '-', fakeApp], { stdio: 'ignore' });
-  execFileSync(lsregister, ['-f', fakeApp]);
-}
-
-const fakePids = () => {
-  const out = spawnSync('pgrep', ['-f', 'FakeDiscord.app/Contents/MacOS/FakeDiscord'], { encoding: 'utf8' }).stdout.trim();
-  return out ? out.split('\n').map(Number) : [];
-};
-const fakePort = () => {
-  for (const pid of fakePids()) {
-    const args = spawnSync('ps', ['-o', 'args=', '-p', String(pid)], { encoding: 'utf8' }).stdout;
-    const match = args.match(/--remote-debugging-port=(\d+)/);
-    if (match) return Number(match[1]);
-  }
-  return null;
-};
-const until = async (test, ms = 20000) => {
-  const end = Date.now() + ms;
-  while (Date.now() < end) {
-    const value = await test();
-    if (value) return value;
-    await sleep(200);
-  }
-  return null;
-};
-const launchFake = async () => {
-  spawnSync('open', ['-g', fakeApp]);
-  return until(() => fakePids().length > 0);
-};
-const quitFake = async () => {
-  fakePids().forEach((pid) => { try { process.kill(pid, 'SIGTERM'); } catch {} });
-  await until(() => fakePids().length === 0);
-};
 
 // 가짜 디스코드 화면에 번역 줄이 붙을 때까지 기다린다.
 async function translatedLine(ms = 40000) {
@@ -116,14 +63,6 @@ const writeLanguages = (value) => writeFileSync(languages, JSON.stringify(value)
 // 이 맥에 실제로 받은 언어팩과 무관하게 시험하도록 언어팩 상태는 언제나 가짜로 준다. 기본은 받은 언어팩 없음.
 const packsFile = join(base, 'packs.json');
 const writePacks = (value) => writeFileSync(packsFile, JSON.stringify(value));
-
-let feed = { status: 404, body: {} };
-const server = createServer((req, res) => {
-  res.writeHead(feed.status, { 'content-type': 'application/json' });
-  res.end(JSON.stringify(feed.body));
-});
-await new Promise((r) => server.listen(0, '127.0.0.1', r));
-const feedURL = `http://127.0.0.1:${server.address().port}/latest`;
 
 try {
   buildFake();
@@ -404,35 +343,6 @@ try {
     check('승인이 지나면 다시 묻고 거절하면 그대로 둠', await exitedIn(10000) && logged('확인 창(시험)') && !logged('안내에서 승인') && fakePids()[0] === waitingDiscord);
     await quitFake();
   }
-
-  // 새 버전 알림
-  writeSettings({ targetLanguage: 'ko' });
-  const checkFeed = async (body, status = 200) => {
-    feed = { status, body };
-    const out = join(base, 'out.png');
-    // 이 프로세스의 시험 서버가 응답해야 하므로 동기 실행을 쓰면 안 된다.
-    const run = spawn(binary, ['--headless', '--data-dir', data, '--update-url', feedURL, '--render-settings', out], { stdio: ['ignore', 'ignore', 'pipe'] });
-    let stderr = '';
-    run.stderr.on('data', (d) => { stderr += d; });
-    await new Promise((r) => run.on('exit', r));
-    return stderr;
-  };
-  const page = 'https://example.com/releases/latest';
-  feed = { status: 200, body: { tag_name: 'v9.9.9', html_url: page } };
-  writeSettings({ targetLanguage: 'ko', restartWithoutAsking: true });
-  await launchFake();
-  startHelper('--fake-languages', languages, '--resident', '--update-url', feedURL);
-  check('켜 둔 동안에도 새 버전을 찾음', !!(await until(() => logged('새 버전 있음: 9.9.9'))));
-  await stopHelper();
-  await quitFake();
-  writeSettings({ targetLanguage: 'ko' });
-  check('새 버전이 있으면 알림', (await checkFeed({ tag_name: 'v9.9.9', html_url: page })).includes('새 버전 있음: 9.9.9'));
-  check('10.0.0이 9.9.9보다 새 버전', (await checkFeed({ tag_name: 'v10.0.0', html_url: page })).includes('새 버전 있음: 10.0.0'));
-  check('같은 버전이면 알리지 않음', !(await checkFeed({ tag_name: 'v0.2.1', html_url: page })).includes('새 버전 있음'));
-  check('지난 출시 0.2.0이면 알리지 않음', !(await checkFeed({ tag_name: 'v0.2.0', html_url: page })).includes('새 버전 있음'));
-  check('옛 버전이면 알리지 않음', !(await checkFeed({ tag_name: 'v0.1.0', html_url: page })).includes('새 버전 있음'));
-  check('저장소가 아직 없어도(404) 그대로 동작', (await checkFeed({ message: 'Not Found' }, 404)).includes('새 버전 확인 실패'));
-  check('https가 아닌 주소는 무시', !(await checkFeed({ tag_name: 'v9.9.9', html_url: 'http://example.com/' })).includes('새 버전 있음'));
 } catch (error) {
   if (error.message !== 'STOP') {
     failures++;
@@ -441,10 +351,8 @@ try {
 } finally {
   await stopHelper();
   await quitFake();
-  server.close();
-  spawnSync(lsregister, ['-u', fakeApp]);
+  removeFake();
   rmSync(base, { recursive: true, force: true });
-  rmSync(join(root, 'build/test'), { recursive: true, force: true });
 }
 
 console.log(failures ? `실패 ${failures}건` : '전부 통과');

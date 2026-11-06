@@ -77,7 +77,6 @@ private enum AppleIntelligenceState {
 
 struct AvailableUpdate: Equatable {
     let version: String
-    let page: URL
 }
 
 // MARK: - 앱 상태
@@ -96,7 +95,9 @@ final class AppModel: ObservableObject {
     @Published private(set) var update: AvailableUpdate?
     @Published private(set) var loginItem = SMAppService.mainApp.status
     @Published private(set) var loginItemError: String?
-    @Published var status = AppStatus.starting
+    @Published var status = AppStatus.starting {
+        didSet { if status == .translating { updates.installIfIdle() } } // 받아 둔 새 버전은 번역 중일 때 설치한다.
+    }
     @Published var discordAction: DiscordAction? // 설정 창 상태 줄에 띄울 디스코드 버튼
     @Published var downloadRequest: TranslationSession.Configuration?
 
@@ -121,7 +122,7 @@ final class AppModel: ObservableObject {
     private var guideWindow: NSWindow?
     private var packHintSource: Locale.Language?
     private var window: NSWindow?
-    private let updateHTTP = URLSession(configuration: .ephemeral)
+    private(set) lazy var updates = Updates(model: self)
 
     init(paths: Paths) {
         self.paths = paths
@@ -406,49 +407,23 @@ final class AppModel: ObservableObject {
         return confirmed
     }
 
-    // MARK: 새 버전 알림
+    // MARK: 새 버전
 
-    // 내려받기까지 하지는 않고, 새 버전이 있다는 것만 상단 막대 아이콘에 표시한다.
-    func runUpdateChecks() async {
-        while true {
-            await checkForUpdate()
-            try? await Task.sleep(nanoseconds: 24 * 60 * 60 * 1_000_000_000)
-        }
+    var autoInstallsUpdates: Bool { updates.automaticallyInstalls }
+
+    func setAutoInstallsUpdates(_ on: Bool) {
+        updates.automaticallyInstalls = on
+        objectWillChange.send()
     }
 
-    func checkForUpdate() async {
-        // 시험은 주소를 직접 줄 때만 확인해서 GitHub에 요청을 보내지 않는다.
-        let published = isHeadless ? nil : Bundle.main.object(forInfoDictionaryKey: "KRTReleasesURL") as? String
-        let address = optionValue("--update-url") ?? published
-        guard let feed = address.flatMap(URL.init(string:)) else { return }
-        var request = URLRequest(url: feed)
-        request.setValue("DiscordTranslator/\(appVersion)", forHTTPHeaderField: "User-Agent")
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        guard let (data, response) = try? await updateHTTP.data(for: request),
-              (response as? HTTPURLResponse)?.statusCode == 200,
-              let release = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let tag = release["tag_name"] as? String,
-              let page = (release["html_url"] as? String).flatMap(URL.init(string:)),
-              page.scheme == "https" else {
-            logLine("새 버전 확인 실패")
-            return
-        }
-        let latest = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
-        guard latest.compare(appVersion, options: .numeric) == .orderedDescending else {
-            setUpdate(nil)
-            return
-        }
-        logLine("새 버전 있음: \(latest)")
-        setUpdate(AvailableUpdate(version: latest, page: page))
+    func checkForUpdates() {
+        updates.checkNow()
     }
 
-    private func setUpdate(_ value: AvailableUpdate?) {
+    // 상단 막대 아이콘의 빨간 점과 설정 창의 「설치」 줄에 쓴다.
+    func setUpdate(_ value: AvailableUpdate?) {
         update = value
         onUpdateChange?()
-    }
-
-    func openUpdatePage() {
-        if let update { NSWorkspace.shared.open(update.page) }
     }
 
     // MARK: 설정 창
@@ -684,10 +659,11 @@ final class AppModel: ObservableObject {
 struct SettingsView: View {
     @ObservedObject var model: AppModel
 
-    // 스크롤 없이 다 보이도록 나타나는 줄만큼 창을 늘린다.
+    // 스크롤 없이 다 보이도록 나타나는 줄만큼 창을 늘린다. 화면보다 길면 창 안에서 스크롤한다.
     private var height: CGFloat {
-        let wanted = 830 + (model.downloadable.isEmpty ? 0 : 48) + (model.canChooseModel ? 48 : 0) + (model.targetInstalled ? 0 : 136)
-        return CGFloat(min(wanted, 860)) // 더 길면 창 안에서 스크롤한다.
+        let wanted = 896 + (model.downloadable.isEmpty ? 0 : 48) + (model.canChooseModel ? 48 : 0) + (model.targetInstalled ? 0 : 136) + (model.update == nil ? 0 : 40)
+        let screen = (NSScreen.main?.visibleFrame.height ?? 900) - 48
+        return min(CGFloat(wanted), max(screen, 640))
     }
 
     @State private var showsPacks = CommandLine.arguments.contains("--show-packs")
@@ -773,13 +749,29 @@ struct SettingsView: View {
                 .foregroundStyle(.secondary)
             }
 
-            Section("버전") {
-                LabeledContent("현재 버전", value: model.appVersion)
-                if let update = model.update {
-                    LabeledContent("새 버전 \(update.version)") {
-                        Button("내려받기") { model.openUpdatePage() }
+            Section {
+                LabeledContent("현재 버전") {
+                    HStack(spacing: 8) {
+                        Text(model.appVersion).foregroundStyle(.secondary)
+                        Button("업데이트 확인") { model.checkForUpdates() }
                     }
                 }
+                if let update = model.update {
+                    LabeledContent {
+                        Button("설치") { model.checkForUpdates() }
+                            .buttonStyle(.borderedProminent)
+                    } label: {
+                        HStack(spacing: 8) {
+                            Circle().fill(Color.red).frame(width: 8, height: 8)
+                            Text("새 버전 \(update.version)")
+                        }
+                    }
+                }
+                Toggle("새 버전 자동으로 설치", isOn: Binding(get: { model.autoInstallsUpdates }, set: { model.setAutoInstallsUpdates($0) }))
+            } header: {
+                Text("버전")
+            } footer: {
+                Text("번역 중일 때 설치하고 앱을 다시 켜요. 디스코드는 켜진 채로 있어요.")
             }
         }
         .formStyle(.grouped)
