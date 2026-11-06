@@ -1,5 +1,5 @@
 #!/bin/zsh
-# 공개용 앱을 만든다: Developer ID 서명 → 공증 → 스테이플 → zip.
+# 공개용 앱을 만든다: Developer ID 서명 → 공증 → 스테이플 → DMG(서명·공증).
 # 먼저 한 번 등록: xcrun notarytool store-credentials "discord-translator" --apple-id "이메일" --team-id "팀ID"
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -35,7 +35,6 @@ xcrun stapler validate "$APP"
 spctl --assess --type execute --verbose "$APP"
 rm -f "$SUBMIT"
 
-FINAL="$OUT/DiscordTranslator-$VERSION.zip"
-ditto -c -k --keepParent "$APP" "$FINAL"
-shasum -a 256 "$FINAL"
+FINAL="$OUT/DiscordTranslator-$VERSION.dmg"
+tools/make-dmg.sh "$APP" "$FINAL"
 print "완료: $FINAL"

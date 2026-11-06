@@ -9,8 +9,8 @@ https://github.com/user-attachments/assets/5115f56c-bd1f-4123-b380-ac513dbb3444
 
 ## 설치
 
-1. [Releases](https://github.com/datell1357/DiscordTranslator/releases/latest)에서 `DiscordTranslator-버전.zip`을 받아 압축을 풉니다.
-2. `디스코드 번역.app`을 `응용 프로그램` 폴더로 옮기고 실행합니다.
+1. [Releases](https://github.com/datell1357/DiscordTranslator/releases/latest)에서 `DiscordTranslator-버전.dmg`를 받아 엽니다.
+2. 열린 창에서 `디스코드 번역`을 `응용 프로그램`으로 끌어 놓고 실행합니다.
 
 애플 공증을 받은 앱이라 처음 실행할 때 따로 허용할 필요가 없습니다.
 
@@ -100,7 +100,7 @@ goes hard = is really great
 
 ## 공개용 빌드
 
-`build.sh`는 임시 서명이라 다른 맥에서는 macOS가 막습니다. 공개할 때는 Developer ID 인증서와 공증 자격을 한 번 등록한 뒤 `tools/release.sh`를 실행합니다.
+`build.sh`는 임시 서명이라 다른 맥에서는 macOS가 막습니다. 공개할 때는 Developer ID 인증서와 공증 자격을 한 번 등록한 뒤 `tools/release.sh`를 실행합니다. 앱과 DMG를 모두 서명·공증해 `build/release/DiscordTranslator-버전.dmg`를 만듭니다.
 
 ```bash
 xcrun notarytool store-credentials "discord-translator" --apple-id "이메일" --team-id "팀ID"
